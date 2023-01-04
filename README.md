@@ -1,1 +1,1 @@
-# INF-D-2023-Cyprian-Lazarowski-260554
+# Temat 22 - Tweety i sondaże wyborcze
