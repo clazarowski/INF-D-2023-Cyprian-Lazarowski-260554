@@ -1,7 +1,11 @@
 import time
-import numpy
+import numpy as np
 import os, glob
 import pygad
+import pyswarms as ps
+from pyswarms.utils.functions import single_obj as fx
+from pyswarms.utils.plotters.plotters import plot_cost_history
+import matplotlib.pyplot as plt
 
 #Read files
 def get_example_filename(path='./fill-a-pix'):
@@ -27,25 +31,47 @@ def get_fill_a_pix(filename):
 def get_len(fill_a_pix):
     return len(fill_a_pix[0]), len(fill_a_pix)
 
-def count_score(id_tab, solution, num):
+def count_all_with_num(fill_a_pix):
+    with_num = 0
+    for row in fill_a_pix:
+        for num in row:
+            if num!="-":
+                with_num+=1
+
+    return with_num
+
+#fitness_func
+def count_score(id_tab, solution, num, option):
     count = 0
     for i in id_tab:
         if solution[i]==1:
             count+=1
-    return abs(num-count)
+    if option==0: return abs(num-count)
+    elif option==1:
+        if num == count: return 0
+        else: return 1
 
-def fintess_func_factory(x,y,fill_a_pix):
+def fintess_func_factory(x,y,fill_a_pix,calculate_max_result,option):
     def fitness_func(solution, solution_idx):
         mistake = 0
         for i in range(y):
             for j in range(x):
                 if fill_a_pix[i][j]!="-":
-                    num = int(fill_a_pix[i][j])
                     id_tab = get_all_neighborhood_id(i,j,x,y)
-                    mistake+=count_score(id_tab,solution,num)
+                    mistake+=count_score(id_tab,solution,int(fill_a_pix[i][j]),option)
         
-        return (x*y*9)-mistake
+        return calculate_max_result-mistake
     return fitness_func
+
+def fitness_func_PSO(solution,x,y,fill_a_pix,option):
+    mistake = 0
+    for i in range(y):
+        for j in range(x):
+            if fill_a_pix[i][j]!="-":
+                id_tab = get_all_neighborhood_id(i,j,x,y)
+                mistake+=count_score(id_tab,solution,int(fill_a_pix[i][j]),option)
+        
+    return mistake
 
 def get_all_neighborhood_id(i,j,x,y):
     id_tab = []
@@ -76,11 +102,12 @@ def print_solution(solution, y, x):
             print(int(solution[(i*x)+j]), end=' ')
         print("")
 
-def genetic_algorithm(x, y, fill_a_pix):
+def genetic_algorithm(x, y, fill_a_pix,max_result,option):
+    start = time.time()
     ga_instance = pygad.GA(gene_space=[0,1],
         num_generations=500,
         num_parents_mating=5,
-        fitness_func=fintess_func_factory(x,y,fill_a_pix),
+        fitness_func=fintess_func_factory(x,y,fill_a_pix,max_result,option),
         sol_per_pop=20,
         num_genes=x*y,
         parent_selection_type="sss",
@@ -88,20 +115,46 @@ def genetic_algorithm(x, y, fill_a_pix):
         crossover_type="single_point",
         mutation_type = "random",
         mutation_percent_genes = 10,
-        stop_criteria=[f"reach_{x*y*9}"],
+        stop_criteria=[f"reach_{max_result}"],
         )
 
     ga_instance.run()
+    end_time = time.time()
 
     solution, solution_fitness, solution_idx = ga_instance.best_solution()
     print_solution(solution, y, x)
     print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=solution_fitness))
-    print(f"Max score: {x*y*9}")
+    print(f"Max score: {max_result}")
+    print(f"Time: {end_time-start}")
     ga_instance.plot_fitness()
+
+def fitness_PSO(x, **kwargs):
+    n_particles = x.shape[0]
+    j = [fitness_func_PSO(x[i], kwargs.get('z'), kwargs.get('y'), kwargs.get('fill_a_pix'), kwargs.get('option')) for i in range(n_particles)]
+    return np.array(j)
+
+def PSO_algorithm(x,y,fill_a_pix, max_resoult, option):
+    options = {'c1': 0.5, 'c2': 0.3, 'w':0.9, 'k':2, 'p':1}
+    kwargs = {'z': x, 'y': y, 'fill_a_pix': fill_a_pix, 'max': max_resoult, 'option': option}
+    optimizer = ps.discrete.BinaryPSO(n_particles=10, dimensions=x*y, options=options)
+    optimizer.optimize(fitness_PSO, iters=500, verbose=True, **kwargs)
+    plot_cost_history(optimizer.cost_history)
+    plt.show()
 
 filenames = filter_filename(get_example_filename())
 for filename in filenames:
     fill_a_pix = get_fill_a_pix('./fill-a-pix/'+filename)
     x,y=get_len(fill_a_pix)
-    print(filename, x, y)
-    genetic_algorithm(x,y,fill_a_pix)
+    
+    print("================================")
+    print(f"Example: {filename} ({x}x{y})")
+    print("================================")
+    print(f"Genetic Algorithm (option 1): ")
+    #genetic_algorithm(x,y,fill_a_pix,x*y*9,0)
+    print("================================")
+    print(f"Genetic Algorithm (option 2): ")
+    #genetic_algorithm(x,y,fill_a_pix,count_all_with_num(fill_a_pix),1)
+    print("================================")
+    print(f"PSO Algorithm:")
+    PSO_algorithm(x,y,fill_a_pix,x*y*9,0)
+    print("================================")
