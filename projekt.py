@@ -6,6 +6,7 @@ import pyswarms as ps
 from pyswarms.utils.functions import single_obj as fx
 from pyswarms.utils.plotters.plotters import plot_cost_history
 import matplotlib.pyplot as plt
+import statistics
 
 #Read files
 def get_example_filename(path='./fill-a-pix'):
@@ -102,10 +103,10 @@ def print_solution(solution, y, x):
             print(int(solution[(i*x)+j]), end=' ')
         print("")
 
-def genetic_algorithm(x, y, fill_a_pix,max_result,option):
+def genetic_algorithm(x, y, fill_a_pix,max_result,option,print_data):
     start = time.time()
     ga_instance = pygad.GA(gene_space=[0,1],
-        num_generations=500,
+        num_generations=10000,
         num_parents_mating=5,
         fitness_func=fintess_func_factory(x,y,fill_a_pix,max_result,option),
         sol_per_pop=20,
@@ -114,7 +115,7 @@ def genetic_algorithm(x, y, fill_a_pix,max_result,option):
         keep_parents=2,
         crossover_type="single_point",
         mutation_type = "random",
-        mutation_percent_genes = 10,
+        mutation_percent_genes = 1,
         stop_criteria=[f"reach_{max_result}"],
         )
 
@@ -122,11 +123,14 @@ def genetic_algorithm(x, y, fill_a_pix,max_result,option):
     end_time = time.time()
 
     solution, solution_fitness, solution_idx = ga_instance.best_solution()
-    print_solution(solution, y, x)
-    print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=solution_fitness))
-    print(f"Max score: {max_result}")
-    print(f"Time: {end_time-start}")
-    ga_instance.plot_fitness()
+    if print_data == 1:
+        print_solution(solution, y, x)
+        print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=solution_fitness))
+        print(f"Max score: {max_result}")
+        print(f"Time: {end_time-start}")
+        ga_instance.plot_fitness()
+        return
+    else: return end_time-start, solution_fitness
 
 def fitness_PSO(x, **kwargs):
     n_particles = x.shape[0]
@@ -137,11 +141,26 @@ def PSO_algorithm(x,y,fill_a_pix, max_resoult, option):
     options = {'c1': 0.5, 'c2': 0.3, 'w':0.9, 'k':2, 'p':1}
     kwargs = {'z': x, 'y': y, 'fill_a_pix': fill_a_pix, 'max': max_resoult, 'option': option}
     optimizer = ps.discrete.BinaryPSO(n_particles=10, dimensions=x*y, options=options)
-    optimizer.optimize(fitness_PSO, iters=500, verbose=True, **kwargs)
+    start = time.time()
+    optimizer.optimize(fitness_PSO, iters=10000, verbose=True, **kwargs)
+    end = time.time()
+    print(f"Time for algorithm: {end-start}")
     plot_cost_history(optimizer.cost_history)
     plt.show()
 
+def test_100_times(x,y,fill_a_pix, max_resoult, option, with_print):
+    program_times=[]; solutions=[]; count_wrong=0
+    for i in range(100):
+        program_time, solution = genetic_algorithm(x,y,fill_a_pix,max_resoult,option,with_print)
+        print(f"Program time: {program_time}, Solution: {solution}")
+        if solution!=max_resoult: count_wrong+=1
+        program_times.append(program_time); solutions.append(solution)
+
+    print(f"All: 100, Find: {100-count_wrong}, Not find: {count_wrong}, Mean: {statistics.mean(solutions)}")
+    print(f"Time Mean: {statistics.mean(program_times)}, Max: {max(program_times)}, Min: {min(program_times)}")
+
 filenames = filter_filename(get_example_filename())
+ex_to_test = 0
 for filename in filenames:
     fill_a_pix = get_fill_a_pix('./fill-a-pix/'+filename)
     x,y=get_len(fill_a_pix)
@@ -150,11 +169,24 @@ for filename in filenames:
     print(f"Example: {filename} ({x}x{y})")
     print("================================")
     print(f"Genetic Algorithm (option 1): ")
-    #genetic_algorithm(x,y,fill_a_pix,x*y*9,0)
+    genetic_algorithm(x,y,fill_a_pix,x*y,0,1)
     print("================================")
     print(f"Genetic Algorithm (option 2): ")
-    #genetic_algorithm(x,y,fill_a_pix,count_all_with_num(fill_a_pix),1)
+    genetic_algorithm(x,y,fill_a_pix,count_all_with_num(fill_a_pix),1,1)
     print("================================")
-    print(f"PSO Algorithm:")
-    PSO_algorithm(x,y,fill_a_pix,x*y*9,0)
+    print(f"PSO Algorithm (option 1):")
+    PSO_algorithm(x,y,fill_a_pix,x*y,0)
     print("================================")
+    print(f"PSO Algorithm (option 2):")
+    PSO_algorithm(x,y,fill_a_pix,count_all_with_num(fill_a_pix),1)
+    print("================================")
+    
+    if ex_to_test!=0:
+        print(f"Genetic Algorithm (option 1) x 100: ")
+        test_100_times(x,y,fill_a_pix,x*y,0,0)
+        print("================================")
+        print(f"Genetic Algorithm (option 2) x 100: ")
+        test_100_times(x,y,fill_a_pix,count_all_with_num(fill_a_pix),1,0)
+        print("================================")
+        ex_to_test-=1
+    
